@@ -1,6 +1,5 @@
-# Replace `<OWNER>/<REPO>` with this action’s repository, and `<TOOL>` / `<HOOK_ID>` with the actual tool and hook name for the concrete action.
-name: "Run <TOOL> via pre-commit + reviewdog"
-description: "Runs <HOOK_ID> pre-commit hook on a diff range and reports via reviewdog"
+name: "Run OpenTofu fmt via pre-commit + reviewdog"
+description: "Runs tofu_fmt on a ref range and posts diff suggestions via reviewdog"
 author: "leinardi"
 branding:
   icon: "check-circle"
@@ -19,8 +18,8 @@ inputs:
 
 outputs:
   exitcode:
-    description: "Exit code of the <HOOK_ID> pre-commit hook"
-    value: ${{ steps.run_hook.outputs.exitcode }}
+    description: "Exit code returned by the tofu_fmt pre-commit hook"
+    value: ${{ steps.tofu_fmt.outputs.exitcode }}
 
 runs:
   using: "composite"
@@ -37,49 +36,47 @@ runs:
         set -euo pipefail
         pip install --no-cache-dir pre-commit
 
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+
     - name: Setup reviewdog binary
       uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
       with:
         reviewdog_version: latest
 
-    # TODO: customize this step for your specific hook and parsing logic
-    - name: Run <HOOK_ID> pre-commit hook
-      id: run_hook
+    - name: Run OpenTofu formatter (tofu_fmt hook)
+      id: tofu_fmt
       shell: bash
       run: |
+        # Run the hook and capture exit code without failing the step
         set +e
         set -o pipefail
 
-        # Run the specific pre-commit hook on the diff range
-        pre-commit run <HOOK_ID> \
-          --hook-stage manual \
+        pre-commit run tofu_fmt \
           --from-ref "${{ inputs.from-ref }}" \
-          --to-ref   "${{ inputs.to-ref }}" \
-          --color=never \
-          | tee hook-output.txt
+          --to-ref   "${{ inputs.to-ref }}"
 
-        exitcode=${PIPESTATUS[0]}
-        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+        rc=$?
+        echo "exitcode=$rc" >> "$GITHUB_OUTPUT"
+
+        # Capture any formatting changes as a diff
+        git diff > tofu.diff || true
+
         # Do not fail here; let reviewdog decide
         exit 0
 
-    - name: Report findings via reviewdog
-      if: steps.run_hook.outputs.exitcode != '0'
+    - name: Report OpenTofu fmt suggestions via reviewdog
+      if: steps.tofu_fmt.outputs.exitcode != '0'
       env:
         REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
       shell: bash
       run: |
-        # TODO: adapt this part to match your tool's output format and efm
-        # For example, you might need to transform hook-output.txt lines
-        # into reviewdog's %t:%f:%l:%c:%m format.
+        reviewdog \
+          -name="opentofu fmt" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < tofu.diff
 
-        cat hook-output.txt \
-          | reviewdog \
-              -efm="%f:%l:%c: %m" \
-              -name="<TOOL>" \
-              -reporter=github-pr-review \
-              -filter-mode=nofilter \
-              -fail-level=info
-
-        # Fail the job if there were violations
+        # Fail the job if there were formatting issues
         exit 1
