@@ -1,21 +1,33 @@
-# Run <TOOL> via pre-commit + reviewdog
+# Run OpenTofu fmt via pre-commit + reviewdog
 
-> Template README — replace `<TOOL>` and `<HOOK_ID>` with your actual tool and pre-commit hook name.
+This GitHub Action runs the `tofu_fmt` hook from [`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) on a ref range and posts
+formatting suggestions to pull requests as a diff review using [reviewdog](https://github.com/reviewdog/reviewdog).
 
-This GitHub Action runs a single [`pre-commit`](https://pre-commit.com/) hook on a diff range and reports results to pull requests
-using [reviewdog](https://github.com/reviewdog/reviewdog).
-
-Typical use case:
-
-- Run the `<HOOK_ID>` pre-commit hook (e.g. `actionlint-oneline`)
-- Annotate problems directly on the PR diff
-- Fail the job if violations are found
+It is meant to keep your OpenTofu configuration consistently formatted in CI, mirroring your local `pre-commit` setup.
 
 ## Requirements
 
-- A `.pre-commit-config.yaml` in your repository with the `<HOOK_ID>` hook enabled
-- GitHub Actions enabled on the repository
-- `secrets.GITHUB_TOKEN` available (default on GitHub-hosted runners)
+Add the `tofu_fmt` hook to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/tofuutils/pre-commit-opentofu
+    rev: v2.2.2
+    hooks:
+      - id: tofu_fmt
+````
+
+You also need:
+
+* GitHub Actions enabled on the repository
+* `secrets.GITHUB_TOKEN` available (default on GitHub-hosted runners)
+* `actions/checkout` fetching enough history to include both `from-ref` and `to-ref`, for example:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+```
 
 ## Inputs
 
@@ -27,45 +39,55 @@ Typical use case:
 
 ## Outputs
 
-| Name       | Description                                  |
-|------------|----------------------------------------------|
-| `exitcode` | Exit code of the `<HOOK_ID>` pre-commit hook |
+| Name       | Description                                          |
+|------------|------------------------------------------------------|
+| `exitcode` | Exit code returned by the `tofu_fmt` pre-commit hook |
 
 ## Usage
 
-In your workflow (example for a pull request):
+Example workflow for pull requests:
 
 ```yaml
-name: Lint with <TOOL>
+name: Format OpenTofu with tofu fmt
 
 on:
   pull_request:
 
 jobs:
-  lint:
+  tofu-fmt:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run <TOOL> via pre-commit + reviewdog
-        uses: <OWNER>/<REPO>@v1
+      - name: Run OpenTofu fmt via pre-commit + reviewdog
+        uses: leinardi/gha-pre-commit-tofu-fmt-reviewdog@v1
         with:
           from-ref: ${{ github.event.pull_request.base.sha }}
           to-ref: ${{ github.event.pull_request.head.sha }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-````
+```
+
+This will:
+
+1. Run `tofu_fmt` on OpenTofu files changed between `from-ref` and `to-ref`.
+2. Capture any formatting changes as a diff.
+3. Post a review with suggested changes (`opentofu fmt`) via reviewdog.
+4. Fail the job if formatting changes are required.
 
 ## Versioning
 
 It’s recommended to pin to the major version:
 
 ```yaml
-uses: <OWNER>/<REPO>@v1
+uses: leinardi/gha-pre-commit-tofu-fmt-reviewdog@v1
 ```
 
 For fully reproducible behavior, pin to an exact tag:
 
 ```yaml
-uses: <OWNER>/<REPO>@v1.0.0
+uses: leinardi/gha-pre-commit-tofu-fmt-reviewdog@v1.0.0
 ```
