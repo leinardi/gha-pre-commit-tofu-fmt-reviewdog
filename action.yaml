@@ -37,7 +37,7 @@ runs:
         pip install --no-cache-dir pre-commit
 
     - name: Setup OpenTofu
-      uses: opentofu/setup-opentofu@v1
+      uses: opentofu/setup-opentofu@v2
 
     - name: Setup reviewdog binary
       uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
